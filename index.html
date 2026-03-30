@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0a0a0a">
+<title>SET CHECK</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0a0a0a;
+  --surface: #141414;
+  --border: #252525;
+  --accent: #e8ff00;
+  --accent2: #ff4d1c;
+  --warn: #ffaa00;
+  --text: #f0f0f0;
+  --muted: #555;
+}
+* { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+html, body {
+  width:100%; height:100%;
+  background:var(--bg);
+  color:var(--text);
+  font-family:'DM Mono',monospace;
+  overflow:hidden;
+  position:fixed;
+  top:0; left:0;
+}
+
+/* SCREENS */
+.screen {
+  position:absolute; inset:0;
+  display:flex; flex-direction:column;
+  transition:opacity .25s, transform .25s;
+}
+.screen.hidden { opacity:0; pointer-events:none; transform:translateY(16px); }
+
+/* SETUP */
+#setup {
+  justify-content:center; align-items:center;
+  background:var(--bg); padding:24px; gap:0;
+}
+.logo { font-family:'Bebas Neue',sans-serif; font-size:68px; letter-spacing:6px; color:var(--accent); line-height:1; text-shadow:0 0 40px rgba(232,255,0,.25); }
+.tagline { font-size:9px; letter-spacing:4px; color:var(--muted); margin-top:4px; margin-bottom:36px; }
+.card { width:100%; max-width:400px; background:var(--surface); border:1px solid var(--border); border-radius:3px; padding:20px; }
+.lbl { font-size:9px; letter-spacing:3px; color:var(--muted); text-transform:uppercase; margin-bottom:8px; }
+.row { display:flex; gap:8px; }
+#apiKey {
+  flex:1; min-width:0;
+  background:var(--bg); border:1px solid var(--border); border-radius:2px;
+  color:var(--text); font-family:'DM Mono',monospace; font-size:11px;
+  padding:11px 13px; outline:none;
+}
+#apiKey:focus { border-color:var(--accent); }
+#apiKey::placeholder { color:var(--muted); }
+.btn-go {
+  background:var(--accent); color:#000; border:none; border-radius:2px;
+  font-family:'Bebas Neue',sans-serif; font-size:20px; letter-spacing:2px;
+  padding:0 18px; cursor:pointer;
+}
+.btn-go:active { opacity:.85; }
+.note { font-size:9px; color:var(--muted); margin-top:10px; line-height:1.6; }
+.divider { border:none; border-top:1px solid var(--border); margin:16px 0; }
+.ratio-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; margin-top:8px; }
+.ratio-btn {
+  background:var(--bg); border:1px solid var(--border); border-radius:2px;
+  color:var(--muted); font-family:'DM Mono',monospace; font-size:10px;
+  padding:8px 4px; cursor:pointer; text-align:center;
+}
+.ratio-btn.active { border-color:var(--accent); color:var(--accent); background:rgba(232,255,0,.06); }
+
+/* CAMERA */
+#cam-screen { background:#000; position:relative; }
+#videoEl { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+
+.lbox-bar { position:absolute; left:0; right:0; background:rgba(0,0,0,.75); z-index:2; pointer-events:none; transition:height .2s; }
+#lbox-top { top:0; height:0; }
+#lbox-bot { bottom:0; height:0; }
+
+#grid { position:absolute; inset:0; z-index:3; pointer-events:none; opacity:0; transition:opacity .3s; }
+#grid.on { opacity:1; }
+.gl { position:absolute; background:rgba(232,255,0,.22); }
+.glv1 { left:33.33%; top:0; bottom:0; width:1px; }
+.glv2 { left:66.66%; top:0; bottom:0; width:1px; }
+.glh1 { top:33.33%; left:0; right:0; height:1px; }
+.glh2 { top:66.66%; left:0; right:0; height:1px; }
+
+#hud-t {
+  position:absolute; top:0; left:0; right:0; z-index:10;
+  padding:max(env(safe-area-inset-top),12px) 14px 12px;
+  display:flex; align-items:center; justify-content:space-between;
+  background:linear-gradient(to bottom,rgba(0,0,0,.65),transparent);
+}
+.hud-logo { font-family:'Bebas Neue',sans-serif; font-size:20px; letter-spacing:4px; color:var(--accent); }
+.hud-btns { display:flex; gap:8px; }
+.iBtn {
+  width:34px; height:34px; border-radius:50%;
+  background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.12);
+  color:var(--text); font-size:14px; cursor:pointer;
+  display:flex; align-items:center; justify-content:center;
+}
+.iBtn.on { border-color:var(--accent); color:var(--accent); }
+.iBtn:active { background:rgba(255,255,255,.18); }
+
+#zoom-bar {
+  position:absolute; bottom:110px; left:50%; transform:translateX(-50%);
+  z-index:10; display:flex; align-items:center; gap:10px;
+  background:rgba(0,0,0,.55); border:1px solid rgba(255,255,255,.1);
+  border-radius:30px; padding:8px 16px;
+}
+#zoomSlider {
+  -webkit-appearance:none; appearance:none;
+  width:130px; height:2px; background:var(--border); border-radius:2px; outline:none;
+}
+#zoomSlider::-webkit-slider-thumb {
+  -webkit-appearance:none; width:16px; height:16px;
+  border-radius:50%; background:var(--accent); cursor:pointer;
+}
+#zoomVal { font-size:11px; color:var(--accent); min-width:30px; text-align:right; }
+
+#hud-b {
+  position:absolute; bottom:0; left:0; right:0; z-index:10;
+  padding:14px 14px max(env(safe-area-inset-bottom),14px);
+  display:flex; align-items:center; justify-content:space-around;
+  background:linear-gradient(to top,rgba(0,0,0,.75),transparent);
+}
+.side-act { display:flex; flex-direction:column; align-items:center; gap:4px; cursor:pointer; opacity:.8; }
+.side-act span { font-size:8px; letter-spacing:2px; text-transform:uppercase; }
+.side-act svg { width:22px; height:22px; }
+.shutter {
+  width:70px; height:70px; border-radius:50%;
+  border:3px solid var(--accent); background:transparent; cursor:pointer;
+  display:flex; align-items:center; justify-content:center;
+}
+.shutter:active .shutter-core { background:#c8df00; }
+.shutter-core { width:54px; height:54px; border-radius:50%; background:var(--accent); }
+
+#flash { position:absolute; inset:0; background:#fff; z-index:100; opacity:0; pointer-events:none; transition:opacity .1s; }
+#canvas { display:none; }
+
+/* PANEL */
+#panel {
+  position:absolute; inset:0; z-index:20;
+  background:#0d0d0d;
+  display:flex; flex-direction:column;
+  visibility:hidden; opacity:0; transform:translateY(100%);
+  transition:opacity .3s, transform .32s cubic-bezier(.25,.8,.25,1), visibility 0s .32s;
+}
+#panel.open {
+  visibility:visible; opacity:1; transform:translateY(0);
+  transition:opacity .3s, transform .32s cubic-bezier(.25,.8,.25,1), visibility 0s 0s;
+}
+#panel-hdr {
+  flex-shrink:0;
+  padding:max(env(safe-area-inset-top),14px) 16px 14px;
+  border-bottom:1px solid var(--border);
+  display:flex; align-items:center; justify-content:space-between;
+}
+.panel-title { font-family:'Bebas Neue',sans-serif; font-size:22px; letter-spacing:4px; color:var(--accent); }
+.close-btn {
+  background:none; border:1px solid var(--border); border-radius:2px;
+  color:var(--muted); font-family:'DM Mono',monospace; font-size:9px;
+  letter-spacing:2px; padding:6px 12px; cursor:pointer; text-transform:uppercase;
+}
+#panel-body {
+  flex:1; min-height:0;
+  overflow-y:auto; -webkit-overflow-scrolling:touch;
+  padding:16px;
+}
+#thumb { width:100%; border-radius:2px; border:1px solid var(--border); margin-bottom:16px; display:none; }
+
+/* Loading */
+#loading { padding:40px 0; display:flex; flex-direction:column; align-items:center; gap:14px; }
+#loading.hide { display:none !important; }
+.filmstrip { display:flex; gap:4px; }
+.ff { width:11px; height:17px; border:1px solid var(--accent); border-radius:1px; animation:flick .8s infinite; }
+.ff:nth-child(2){animation-delay:.15s} .ff:nth-child(3){animation-delay:.3s}
+.ff:nth-child(4){animation-delay:.45s} .ff:nth-child(5){animation-delay:.6s}
+@keyframes flick { 0%,100%{background:transparent;opacity:.35} 50%{background:var(--accent);opacity:1} }
+.loading-txt { font-size:10px; letter-spacing:3px; color:var(--muted); animation:pulse 1.5s infinite; }
+@keyframes pulse { 0%,100%{opacity:.4} 50%{opacity:1} }
+
+/* Debug */
+#debugLog { background:#111; border:1px solid #333; border-radius:2px; padding:10px; margin-bottom:12px; font-size:10px; color:#f88; line-height:1.6; word-break:break-all; display:none; }
+#debugLog.show { display:block; }
+
+/* Results */
+#results { display:none; }
+#results.show { display:block; }
+.scores { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:16px; }
+.sc { background:var(--surface); border:1px solid var(--border); border-radius:2px; padding:12px 8px; text-align:center; }
+.sc-num { font-family:'Bebas Neue',sans-serif; font-size:38px; line-height:1; color:var(--accent); }
+.sc-num.warn { color:var(--warn); }
+.sc-num.bad { color:var(--accent2); }
+.sc-lbl { font-size:8px; letter-spacing:2px; color:var(--muted); margin-top:3px; text-transform:uppercase; }
+.sec-lbl { font-size:8px; letter-spacing:3px; color:var(--muted); text-transform:uppercase; padding-bottom:8px; border-bottom:1px solid var(--border); margin-bottom:12px; }
+.overall-txt { font-size:13px; line-height:1.75; color:var(--text); margin-bottom:20px; }
+.notes-list { list-style:none; }
+.note-item { display:flex; gap:10px; align-items:flex-start; padding:10px 0; border-bottom:1px solid var(--border); font-size:12px; line-height:1.6; }
+.note-item:last-child { border-bottom:none; }
+.dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; margin-top:5px; }
+.dot.ok { background:var(--accent); } .dot.warn { background:var(--warn); } .dot.bad { background:var(--accent2); }
+
+/* Error */
+#err { display:none; flex-direction:column; align-items:center; gap:12px; padding:36px 16px; text-align:center; }
+#err.show { display:flex; }
+.err-msg { font-size:11px; color:var(--muted); line-height:1.65; }
+.retry-btn { background:var(--accent2); color:#fff; border:none; border-radius:2px; font-family:'Bebas Neue',sans-serif; font-size:18px; letter-spacing:2px; padding:10px 24px; cursor:pointer; }
+</style>
+</head>
+<body>
+
+<!-- SETUP -->
+<div class="screen" id="setup">
+  <div style="text-align:center">
+    <div class="logo">SET CHECK</div>
+    <div class="tagline">AI cinematography assistant</div>
+  </div>
+  <div class="card">
+    <div class="lbl">Anthropic API Key</div>
+    <div class="row">
+      <input type="password" id="apiKey" placeholder="sk-ant-api03-…" autocomplete="off" spellcheck="false">
+      <button class="btn-go" onclick="startApp()">GO</button>
+    </div>
+    <div class="note">Key stays on-device — sent only to Anthropic.</div>
+    <hr class="divider">
+    <div class="lbl">Aspect Ratio</div>
+    <div class="ratio-grid">
+      <button class="ratio-btn active" data-r="1.778" onclick="pickRatio(this)">16:9</button>
+      <button class="ratio-btn" data-r="2.39" onclick="pickRatio(this)">2.39:1</button>
+      <button class="ratio-btn" data-r="1.85" onclick="pickRatio(this)">1.85:1</button>
+      <button class="ratio-btn" data-r="1.333" onclick="pickRatio(this)">4:3</button>
+    </div>
+  </div>
+</div>
+
+<!-- CAMERA -->
+<div class="screen hidden" id="cam-screen">
+  <video id="videoEl" autoplay playsinline muted></video>
+  <canvas id="canvas"></canvas>
+  <div id="flash"></div>
+  <div class="lbox-bar" id="lbox-top"></div>
+  <div class="lbox-bar" id="lbox-bot"></div>
+  <div id="grid">
+    <div class="gl glv1"></div><div class="gl glv2"></div>
+    <div class="gl glh1"></div><div class="gl glh2"></div>
+  </div>
+
+  <div id="hud-t">
+    <div class="hud-logo">SET CHECK</div>
+    <div class="hud-btns">
+      <div class="iBtn" id="gridBtn" onclick="toggleGrid()">⊞</div>
+      <div class="iBtn" onclick="flipCam()">↺</div>
+      <div class="iBtn" onclick="goSetup()">⚙</div>
+    </div>
+  </div>
+
+  <div id="zoom-bar">
+    <span style="font-size:10px;color:var(--muted)">Z</span>
+    <input type="range" id="zoomSlider" min="1" max="5" step="0.1" value="1" oninput="doZoom(this.value)">
+    <span id="zoomVal">1.0×</span>
+  </div>
+
+  <div id="hud-b">
+    <div class="side-act" onclick="document.getElementById('fileIn').click()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <rect x="3" y="3" width="18" height="18" rx="2"/>
+        <circle cx="8.5" cy="8.5" r="1.5"/>
+        <polyline points="21 15 16 10 5 21"/>
+      </svg>
+      <span>Gallery</span>
+    </div>
+    <input type="file" id="fileIn" accept="image/*" style="display:none" onchange="fromFile(event)">
+    <button class="shutter" onclick="shoot()"><div class="shutter-core"></div></button>
+    <div class="side-act" onclick="cycleCtx()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M15 10l4.553-2.069A1 1 0 0121 8.82V15.18a1 1 0 01-1.447.89L15 14M3 8a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"/>
+      </svg>
+      <span id="ctxLbl">Narrative</span>
+    </div>
+  </div>
+
+  <!-- PANEL -->
+  <div id="panel">
+    <div id="panel-hdr">
+      <div class="panel-title">ANALYSIS</div>
+      <button class="close-btn" onclick="closePanel()">✕ Close</button>
+    </div>
+    <div id="panel-body">
+      <img id="thumb" alt="captured frame">
+      <div id="loading">
+        <div class="filmstrip">
+          <div class="ff"></div><div class="ff"></div><div class="ff"></div>
+          <div class="ff"></div><div class="ff"></div>
+        </div>
+        <div class="loading-txt">Analyzing frame…</div>
+      </div>
+      <div id="debugLog"></div>
+      <div id="results">
+        <div class="scores" id="scoreRow"></div>
+        <div class="sec-lbl">Overall Read</div>
+        <div class="overall-txt" id="overallTxt"></div>
+        <div class="sec-lbl">Notes</div>
+        <ul class="notes-list" id="notesList"></ul>
+      </div>
+      <div id="err">
+        <div style="font-size:28px">⚠</div>
+        <div class="err-msg" id="errMsg">Something went wrong.</div>
+        <button class="retry-btn" onclick="closePanel()">RETRY</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let apiKey = '';
+let ratio = 1.778;
+let stream = null;
+let facing = 'environment';
+let gridOn = false;
+let ctxIdx = 0;
+const ctxList = ['Narrative','Documentary','Commercial','Music Video'];
+
+function pickRatio(btn) {
+  document.querySelectorAll('.ratio-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  ratio = parseFloat(btn.dataset.r);
+  updateBars();
+}
+
+function startApp() {
+  const k = document.getElementById('apiKey').value.trim();
+  if (!k.startsWith('sk-ant')) { alert('Enter a valid Anthropic API key.'); return; }
+  apiKey = k;
+  showScreen('cam-screen');
+  initCam();
+}
+
+function goSetup() { stopStream(); showScreen('setup'); }
+
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.add('hidden'));
+  document.getElementById(id).classList.remove('hidden');
+}
+
+async function initCam() {
+  stopStream();
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: facing, width:{ideal:1920}, height:{ideal:1080} }, audio:false
+    });
+    const v = document.getElementById('videoEl');
+    v.srcObject = stream;
+    v.onloadedmetadata = () => { v.play(); updateBars(); };
+  } catch(e) { alert('Camera access denied. Allow permissions and reload.'); }
+}
+
+function stopStream() {
+  if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+}
+
+function flipCam() { facing = facing === 'environment' ? 'user' : 'environment'; initCam(); }
+
+function toggleGrid() {
+  gridOn = !gridOn;
+  document.getElementById('grid').classList.toggle('on', gridOn);
+  document.getElementById('gridBtn').classList.toggle('on', gridOn);
+}
+
+function doZoom(v) {
+  document.getElementById('zoomVal').textContent = parseFloat(v).toFixed(1) + '×';
+  const track = stream?.getVideoTracks()[0];
+  if (track && track.getCapabilities().zoom) {
+    track.applyConstraints({ advanced:[{ zoom: parseFloat(v) }] });
+  } else {
+    document.getElementById('videoEl').style.transform = `scale(${v})`;
+  }
+}
+
+function cycleCtx() {
+  ctxIdx = (ctxIdx + 1) % ctxList.length;
+  document.getElementById('ctxLbl').textContent = ctxList[ctxIdx];
+}
+
+function updateBars() {
+  const W = window.innerWidth;
+  const H = window.innerHeight;
+  // Height of frame if we display the chosen landscape ratio at full screen width
+  const frameH = W / ratio;
+  const top = document.getElementById('lbox-top');
+  const bot = document.getElementById('lbox-bot');
+  if (frameH < H) {
+    const barH = (H - frameH) / 2;
+    top.style.height = barH + 'px';
+    bot.style.height = barH + 'px';
+  } else {
+    top.style.height = '0';
+    bot.style.height = '0';
+  }
+}
+window.addEventListener('resize', updateBars);
+
+function shoot() {
+  const v = document.getElementById('videoEl');
+  if (!v.videoWidth || !v.videoHeight) { alert('Camera not ready, try again.'); return; }
+  const c = document.getElementById('canvas');
+  c.width = v.videoWidth;
+  c.height = v.videoHeight;
+  c.getContext('2d').drawImage(v, 0, 0);
+  const f = document.getElementById('flash');
+  f.style.opacity = '1';
+  setTimeout(() => f.style.opacity = '0', 100);
+  c.toBlob(blob => {
+    if (!blob || blob.size < 500) { alert('Capture failed, try again.'); return; }
+    openPanel(blob);
+  }, 'image/jpeg', 0.88);
+}
+
+function fromFile(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  openPanel(file);
+  e.target.value = '';
+}
+
+function openPanel(blob) {
+  // Show thumb
+  const thumb = document.getElementById('thumb');
+  thumb.src = URL.createObjectURL(blob);
+  thumb.style.display = 'block';
+
+  // Reset states
+  document.getElementById('loading').classList.remove('hide');
+  document.getElementById('results').classList.remove('show');
+  document.getElementById('err').classList.remove('show');
+  document.getElementById('debugLog').classList.remove('show');
+  document.getElementById('debugLog').textContent = '';
+
+  document.getElementById('panel').classList.add('open');
+  document.getElementById('panel-body').scrollTop = 0;
+
+  analyze(blob);
+}
+
+function closePanel() {
+  document.getElementById('panel').classList.remove('open');
+}
+
+function dbg(msg) {
+  const el = document.getElementById('debugLog');
+  el.classList.add('show');
+  el.textContent += msg + '\n';
+}
+
+function showErr(msg) {
+  document.getElementById('loading').classList.add('hide');
+  document.getElementById('err').classList.add('show');
+  document.getElementById('errMsg').textContent = msg;
+}
+
+async function analyze(blob) {
+  try {
+    const b64 = await toB64(blob);
+    const imgData = b64.split(',')[1];
+    const mime = blob.type || 'image/jpeg';
+
+    const ratioLabel = ratio > 2.3 ? '2.39:1 Anamorphic Scope'
+      : ratio > 1.8 ? '1.85:1 Flat'
+      : ratio > 1.5 ? '16:9'
+      : '4:3 Academy';
+
+    const prompt = `You are an experienced Director of Photography reviewing a camera frame or set photo.
+Shooting context: ${ctxList[ctxIdx]}
+Aspect ratio: ${ratioLabel}
+
+Analyze this image. Respond ONLY with a raw JSON object. Do not use markdown code fences. Start with { and end with }.
+
+{
+  "scores": { "framing": 7, "lighting": 6, "composition": 8 },
+  "overall": "Two or three sentence read of the shot.",
+  "notes": [
+    { "type": "ok", "text": "Something that works well." },
+    { "type": "warn", "text": "Something that needs attention." },
+    { "type": "bad", "text": "A real problem to fix." },
+    { "type": "ok", "text": "Another positive." },
+    { "type": "warn", "text": "Another note." }
+  ]
+}
+
+Evaluate: headroom, lead room, eye lines, background depth/clutter, lighting direction/quality, exposure, color temp, contrast, motivated sources, set dressing, distracting elements.`;
+
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1024,
+        messages: [{
+          role: 'user',
+          content: [
+            { type:'image', source:{ type:'base64', media_type: mime, data: imgData } },
+            { type:'text', text: prompt }
+          ]
+        }]
+      })
+    });
+
+    if (!resp.ok) {
+      const ej = await resp.json().catch(() => ({}));
+      throw new Error('API ' + resp.status + ': ' + (ej.error?.message || resp.statusText));
+    }
+
+    const data = await resp.json();
+    const raw = data?.content?.[0]?.text;
+    if (!raw) throw new Error('Empty response. Raw: ' + JSON.stringify(data).slice(0,200));
+
+    const match = raw.match(/\{[\s\S]*\}/);
+    if (!match) throw new Error('No JSON in response. Got: ' + raw.slice(0,300));
+
+    let result;
+    try { result = JSON.parse(match[0]); }
+    catch(pe) { throw new Error('Parse error: ' + pe.message + ' | ' + match[0].slice(0,200)); }
+
+    render(result);
+  } catch(e) {
+    dbg('ERROR: ' + e.message);
+    showErr(e.message);
+  }
+}
+
+function render(r) {
+  document.getElementById('loading').classList.add('hide');
+
+  const defs = [{k:'framing',lbl:'Framing'},{k:'lighting',lbl:'Lighting'},{k:'composition',lbl:'Composition'}];
+  document.getElementById('scoreRow').innerHTML = defs.map(d => {
+    const v = r.scores?.[d.k] ?? '?';
+    const cls = typeof v === 'number' ? (v >= 7 ? '' : v >= 5 ? ' warn' : ' bad') : '';
+    return `<div class="sc"><div class="sc-num${cls}">${v}</div><div class="sc-lbl">${d.lbl}</div></div>`;
+  }).join('');
+
+  document.getElementById('overallTxt').textContent = r.overall || '';
+  document.getElementById('notesList').innerHTML = (r.notes || []).map(n => {
+    const dc = n.type === 'ok' ? 'ok' : n.type === 'warn' ? 'warn' : 'bad';
+    return `<li class="note-item"><div class="dot ${dc}"></div><span>${n.text}</span></li>`;
+  }).join('');
+
+  document.getElementById('results').classList.add('show');
+}
+
+function toB64(blob) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result);
+    r.onerror = rej;
+    r.readAsDataURL(blob);
+  });
+}
+</script>
+</body>
+</html>
