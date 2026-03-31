@@ -248,7 +248,7 @@ html, body {
 </div>
 
 <script>
-let apiKey = '', ratio = 1.778, stream = null, facing = 'environment', gridOn = false, ctxIdx = 0, zoomLevel = 1;
+let apiKey = '', ratio = 1.778, stream = null, facing = 'environment', gridOn = false, ctxIdx = 0, zoomLevel = 1, nativeZoomActive = false;
 const ctxList = ['Narrative','Documentary','Commercial','Music Video'];
 const ratios = [{r:1.778,lbl:'16:9'},{r:2.39,lbl:'2.39'},{r:1.85,lbl:'1.85'},{r:1.333,lbl:'4:3'}];
 
@@ -317,13 +317,24 @@ function doZoom(v) {
   zoomLevel = parseFloat(v);
   document.getElementById('zoomVal').textContent = zoomLevel.toFixed(1) + '×';
   const track = stream?.getVideoTracks()[0];
-  if (track && track.getCapabilities && track.getCapabilities().zoom) {
-    // Native hardware zoom — canvas will capture it directly
-    track.applyConstraints({ advanced:[{ zoom: zoomLevel }] });
-    document.getElementById('videoEl').style.transform = '';
-  } else {
-    // CSS zoom for preview — canvas draw will replicate it mathematically
+  let nativeZoom = false;
+  if (track && track.getCapabilities) {
+    try {
+      const caps = track.getCapabilities();
+      if (caps.zoom) {
+        track.applyConstraints({ advanced:[{ zoom: zoomLevel }] });
+        nativeZoom = true;
+        nativeZoomActive = true;
+      }
+    } catch(e) {}
+  }
+  if (!nativeZoom) nativeZoomActive = false;
+  // Always apply CSS scale for preview feedback
+  // Canvas capture uses mathematical crop regardless (native zoom already in feed, CSS zoom replicated via crop)
+  if (!nativeZoom) {
     document.getElementById('videoEl').style.transform = `scale(${zoomLevel})`;
+  } else {
+    document.getElementById('videoEl').style.transform = '';
   }
 }
 
@@ -351,33 +362,32 @@ function shoot() {
   const srcW = v.videoWidth;
   const srcH = v.videoHeight;
 
-  // --- Apply zoom crop ---
-  // Zooming in means we sample a smaller region from the center of the frame
-  const cropW = srcW / zoomLevel;
-  const cropH = srcH / zoomLevel;
-  const cropX = (srcW - cropW) / 2;
-  const cropY = (srcH - cropH) / 2;
+  // Step 1: zoom crop — always apply mathematically from center
+  // If native zoom is active, the video feed is already zoomed but we still
+  // use zoomLevel=1 equivalent crop (no double-zoom). Track via nativeZoom flag.
+  const effectiveZoom = (nativeZoomActive) ? 1 : zoomLevel;
+  const zCropW = srcW / effectiveZoom;
+  const zCropH = srcH / effectiveZoom;
+  const zCropX = (srcW - zCropW) / 2;
+  const zCropY = (srcH - zCropH) / 2;
 
-  // --- Apply aspect ratio crop ---
-  // From the zoomed region, crop to the chosen ratio
-  // The zoomed region has ratio cropW/cropH. We want ratio "ratio" (e.g. 2.39).
-  let srcX = cropX, srcY = cropY, srcFinalW = cropW, srcFinalH = cropH;
-  const zoomedRatio = cropW / cropH;
-  if (zoomedRatio > ratio) {
-    // Zoomed frame is wider than target — crop sides
-    srcFinalW = cropH * ratio;
-    srcX = cropX + (cropW - srcFinalW) / 2;
-  } else if (zoomedRatio < ratio) {
-    // Zoomed frame is taller than target — crop top/bottom
-    srcFinalH = cropW / ratio;
-    srcY = cropY + (cropH - srcFinalH) / 2;
+  // Step 2: aspect ratio crop from within the zoom-cropped region
+  let sx = zCropX, sy = zCropY, sw = zCropW, sh = zCropH;
+  const zRatio = zCropW / zCropH;
+  if (zRatio > ratio) {
+    // Too wide — trim sides
+    sw = zCropH * ratio;
+    sx = zCropX + (zCropW - sw) / 2;
+  } else if (zRatio < ratio) {
+    // Too tall — trim top/bottom
+    sh = zCropW / ratio;
+    sy = zCropY + (zCropH - sh) / 2;
   }
 
-  // Output canvas matches the cropped region at native resolution
   const c = document.getElementById('canvas');
-  c.width = Math.round(srcFinalW);
-  c.height = Math.round(srcFinalH);
-  c.getContext('2d').drawImage(v, srcX, srcY, srcFinalW, srcFinalH, 0, 0, c.width, c.height);
+  c.width = Math.round(sw);
+  c.height = Math.round(sh);
+  c.getContext('2d').drawImage(v, sx, sy, sw, sh, 0, 0, c.width, c.height);
 
   const f = document.getElementById('flash');
   f.style.opacity = '1';
