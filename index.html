@@ -248,7 +248,7 @@ html, body {
 </div>
 
 <script>
-let apiKey = '', ratio = 1.778, stream = null, facing = 'environment', gridOn = false, ctxIdx = 0;
+let apiKey = '', ratio = 1.778, stream = null, facing = 'environment', gridOn = false, ctxIdx = 0, zoomLevel = 1;
 const ctxList = ['Narrative','Documentary','Commercial','Music Video'];
 const ratios = [{r:1.778,lbl:'16:9'},{r:2.39,lbl:'2.39'},{r:1.85,lbl:'1.85'},{r:1.333,lbl:'4:3'}];
 
@@ -314,12 +314,16 @@ function toggleGrid() {
 }
 
 function doZoom(v) {
-  document.getElementById('zoomVal').textContent = parseFloat(v).toFixed(1) + '×';
+  zoomLevel = parseFloat(v);
+  document.getElementById('zoomVal').textContent = zoomLevel.toFixed(1) + '×';
   const track = stream?.getVideoTracks()[0];
   if (track && track.getCapabilities && track.getCapabilities().zoom) {
-    track.applyConstraints({ advanced:[{ zoom: parseFloat(v) }] });
+    // Native hardware zoom — canvas will capture it directly
+    track.applyConstraints({ advanced:[{ zoom: zoomLevel }] });
+    document.getElementById('videoEl').style.transform = '';
   } else {
-    document.getElementById('videoEl').style.transform = `scale(${v})`;
+    // CSS zoom for preview — canvas draw will replicate it mathematically
+    document.getElementById('videoEl').style.transform = `scale(${zoomLevel})`;
   }
 }
 
@@ -343,12 +347,42 @@ window.addEventListener('resize', sizeViewfinder);
 function shoot() {
   const v = document.getElementById('videoEl');
   if (!v.videoWidth || !v.videoHeight) { alert('Camera not ready, try again.'); return; }
+
+  const srcW = v.videoWidth;
+  const srcH = v.videoHeight;
+
+  // --- Apply zoom crop ---
+  // Zooming in means we sample a smaller region from the center of the frame
+  const cropW = srcW / zoomLevel;
+  const cropH = srcH / zoomLevel;
+  const cropX = (srcW - cropW) / 2;
+  const cropY = (srcH - cropH) / 2;
+
+  // --- Apply aspect ratio crop ---
+  // From the zoomed region, crop to the chosen ratio
+  // The zoomed region has ratio cropW/cropH. We want ratio "ratio" (e.g. 2.39).
+  let srcX = cropX, srcY = cropY, srcFinalW = cropW, srcFinalH = cropH;
+  const zoomedRatio = cropW / cropH;
+  if (zoomedRatio > ratio) {
+    // Zoomed frame is wider than target — crop sides
+    srcFinalW = cropH * ratio;
+    srcX = cropX + (cropW - srcFinalW) / 2;
+  } else if (zoomedRatio < ratio) {
+    // Zoomed frame is taller than target — crop top/bottom
+    srcFinalH = cropW / ratio;
+    srcY = cropY + (cropH - srcFinalH) / 2;
+  }
+
+  // Output canvas matches the cropped region at native resolution
   const c = document.getElementById('canvas');
-  c.width = v.videoWidth; c.height = v.videoHeight;
-  c.getContext('2d').drawImage(v, 0, 0);
+  c.width = Math.round(srcFinalW);
+  c.height = Math.round(srcFinalH);
+  c.getContext('2d').drawImage(v, srcX, srcY, srcFinalW, srcFinalH, 0, 0, c.width, c.height);
+
   const f = document.getElementById('flash');
   f.style.opacity = '1';
   setTimeout(() => f.style.opacity = '0', 100);
+
   c.toBlob(blob => {
     if (!blob || blob.size < 500) { alert('Capture failed, try again.'); return; }
     openPanel(blob);
